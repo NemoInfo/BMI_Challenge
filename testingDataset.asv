@@ -68,14 +68,24 @@ X = spikes(300:end,:);
 W = rand(2,98);
 B = rand(2,1);
 eta = 0.01;
+MSE = zeros(100);
 
 %initialize weights and biases
 for epoch = 1:100
     for t = 1:time
         Yhat = W*X(t)+B;
-        W = W + eta*(2/time*X(t)*(Y-Yhat))
+        W = W + eta*(2/time*X(t)*(Y(t).'-Yhat));
+        B = B + eta*(2/time*(Y(t).'-Yhat));
+        MSE(epoch) = MSE(epoch) + 1/time*sum(Y(t).'.^2-Yhat.^2);
     end
 end
+
+% plot MSE
+plot(MSE);
+hold on
+
+
+
 
 
 

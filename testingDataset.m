@@ -43,7 +43,7 @@ end
 for i = 1
     for k = 1:8
         plot(data.trial(i,k).spikes(1,:))
-        hold on
+        hold on;
     end
 end
 
@@ -68,14 +68,25 @@ X = spikes(300:end,:);
 W = rand(2,98);
 B = rand(2,1);
 eta = 0.01;
+epochs = 10000;
+MSE = zeros(epochs,1);
 
 %initialize weights and biases
-for epoch = 1:100
+for epoch = 1:epochs
     for t = 1:time
-        Yhat = W*X(t)+B;
-        W = W + eta*(2/time*X(t)*(Y(t).'-Yhat))
+        Yhat = W*X(t,:).'+B;
+        W = W + eta*(2/time*(Y(t,:).'-Yhat))*X(t,:);
+        B = B + eta*(2/time*(Y(t,:).'-Yhat));
+        MSE(epoch) = MSE(epoch) + 1/time*sum(Y(t,:).'.^2-Yhat.^2);
     end
 end
+
+% plot MSE
+plot(MSE);
+hold on
+
+
+
 
 
 
