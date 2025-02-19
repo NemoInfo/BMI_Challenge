@@ -1,65 +1,84 @@
-function [modelParameters] = positionEstimatorTraining(training_data)
-%training_data = training_data(1:10,:);
-total_samples_A = 0;
-total_samples_H = 0;
-for i = 1:numel(training_data)
-  T = size(training_data(i).handPos, 2);
-  total_samples_A = total_samples_A + (T - 2); % For state transitions
-  total_samples_H = total_samples_H + (T - 1); % For observation model
+function [modelParameters] = positionEstimatorTraining(train)
+% Kalman modeling
+% we need to compute A, H, Q and R
+bin = 20;
+
+progress = waitbar(100, "Computing spike rates...");
+train = train(:,3);
+for i = 1:numel(train)
+  train(i).spikes  = train(i).spikes(:, 300-bin+1:end-100);
+  train(i).handPos = train(i).handPos(1:2, 300-1 :end-100);
+  train(i).handPos = handPosToHandPosVel(train(i).handPos);
+  train(i).spikes  = spikeTrainToSpikeRates(train(i).spikes, bin);
+  assert(size(train(i).spikes, 2) == size(train(i).handPos, 2))
+  waitbar(i/numel(train), progress)
+end
+close(progress)
+
+% modelParameters = train; % @REMOVE THIS
+
+X_Xm  = zeros(size(train(1),1), size(train(1),1));
+Xm_Xm = zeros(size(X_Xm));
+
+for i = 1:numel(train)
+  x  = train(i).handPos(:,2:end);
+  xm = train(i).handPos(:,1:end-1);
+  X_Xm  = X_Xm  + x  * xm';
+  Xm_Xm = Xm_Xm + xm * xm';
 end
 
-X_A = zeros(total_samples_A, 4); % For state transitions (current state)
-Y_A = zeros(total_samples_A, 4); % For state transitions (next state)
-X_H = zeros(total_samples_H, 4); % For observation model (states)
-Z_H = zeros(total_samples_H, size(training_data(1, 1).spikes, 1)); % For observation model
-counter_A = 1;
-counter_H = 1;
+A = X_Xm / Xm_Xm; 
 
-wbar = waitbar(0, "Training...");
-for i = 1:numel(training_data)
-  trial = training_data(i);
-  handPos = trial.handPos(1:2, 300:end-100);
-  spikes = trial.spikes(:,300:end-100);
-  T = size(handPos, 2);
-  
-  % Compute state vectors [x, y, dx, dy]
-  state_vectors = zeros(4, T-1);
-  for t = 1:T-1
-    pos = handPos(:, t);
-    vel = handPos(:, t+1) - handPos(:, t);
-    state_vectors(:, t) = [pos; vel];
-  end
-  
-  % Collect data for A (state transition matrix)
-  for t = 1:T-2
-    X_A(counter_A, :) = state_vectors(:, t)';
-    Y_A(counter_A, :) = state_vectors(:, t+1)';
-    counter_A = counter_A + 1;
-  end
-  
-  % Collect data for H (observation matrix)
-  for t = 1:T-1
-    X_H(counter_H, :) = state_vectors(:, t)';
-    Z_H(counter_H, :) = spikes(:, t)';
-    counter_H = counter_H + 1;
-  end
-  waitbar(i / numel(training_data), wbar); % Update progress
+Q = zeros(size(A));
+for i = 1:numel(train)
+  x  = train(i).handPos(:,2:end);
+  xm = train(i).handPos(:,1:end-1);
+  eps= x - A * xm;
+  Q = Q + eps * eps' / size(x,2);
 end
-close(wbar);
 
-% Estimate state transition matrix A and process noise W
-A = (X_A \ Y_A)';
-residuals_A = Y_A - X_A * A';
-W = cov(residuals_A, 1);
+Q = Q / numel(train);
 
-% Estimate observation matrix H and measurement noise Q
-H = (X_H \ Z_H)';
-residuals_H = Z_H - X_H * H';
-Q = cov(residuals_H, 1);
+Y_X = zeros(size(train(i).spikes,1), size(A,1));
+X_X = zeros(size(A));
 
-% Store model parameters
+for i = 1:numel(train)
+  x = train(i).handPos;
+  y = train(i).spikes;
+  Y_X = Y_X + y * x';
+  X_X = X_X + x * x';
+end
+
+H = Y_X / X_X;
+
+R = zeros(size(train(i).spikes,1), size(train(i).spikes,1));
+
+for i = 1:numel(train)
+  x = train(i).handPos;
+  y = train(i).spikes;
+  n = y - H * x;
+  R = R + n * n' / size(x,2);
+end
+
+R = R / numel(train);
+
 modelParameters.A = A;
-modelParameters.H = H;
-modelParameters.W = W;
 modelParameters.Q = Q;
+modelParameters.H = H;
+modelParameters.R = R;
+end
+
+function [rates] = spikeTrainToSpikeRates(train, bin)
+  rates = zeros(size(train) - [0 bin]);
+
+  for i = 1:size(train,1)
+    for t = bin:size(train,2)
+      rates(i, t-bin+1) = sum(train(i, t-bin+1:t));
+    end
+  end
+end
+
+function [state] = handPosToHandPosVel(pos)
+  vel = pos(:,2:end) - pos(:,1:end-1);
+  state = [pos(:,2:end); vel];
 end

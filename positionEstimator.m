@@ -40,49 +40,42 @@ function [x, y, newModelParameters] = positionEstimator(test_data, modelParamete
   % ... compute position at the given timestep.
 if numel(test_data.decodedHandPos) == 0
   startPos = test_data.startHandPos(1:2);
-  modelParameters.x_est = [startPos; 0; 0];
-  modelParameters.P_est = diag([1e-6, 1e-6, 1, 1]);
+  modelParameters.x = [startPos; rand(2,1)*5];
+  modelParameters.P = zeros(size(modelParameters.A));
 end
-x_est = modelParameters.x_est;
-P_est = modelParameters.P_est;
-
-% Kalman filter prediction
 A = modelParameters.A;
-W = modelParameters.W;
-x_pred = A * x_est;
-P_pred = A * P_est * A' + W;
-
-% Kalman filter update with latest spikes
-H = modelParameters.H;
 Q = modelParameters.Q;
-z = test_data.spikes(:, end); % Latest spike counts
+H = modelParameters.H;
+R = modelParameters.R;
+x = modelParameters.x;
+P = modelParameters.P;
+y = spikeTrainToSpikeRates(test_data.spikes(:, end-19:end), 20);
+y = y(:,end);
 
-% Compute innovation covariance S
-S = H * P_pred * H' + Q;
+xh = A * x;
+Ph = A * P * A' + Q;
 
-% Regularize S to avoid singularity
-epsilon = 1e-6; % Small regularization term
-S = S + epsilon * eye(size(S));
+z = y - H * xh;
+S = H * Ph * H' + R + 1e6*eye(size(R)); % + 1e-8 * eye(size(R))
+K = Ph * H' / S;
 
-% Compute Kalman gain using pseudo-inverse
-K = P_pred * H' * pinv(S);
-
-% Update state estimate and covariance
-y = z - H * x_pred;
-x_est = x_pred + K * y;
-P_est = (eye(4) - K * H) * P_pred;
-
-% Update state
 newModelParameters = modelParameters;
-newModelParameters.x_est = x_est;
-newModelParameters.P_est = P_est;
-
-% Return estimated position
-x = x_est(1);
-y = x_est(2);
-  
+newModelParameters.x = xh + K * z;
+newModelParameters.P = (eye(size(A)) - K*H) * Ph;
 % Return Value:
 
+x = newModelParameters.x(1);
+y = newModelParameters.x(2);
 % - [x, y]:
 %     current position of the hand
+end
+
+function [rates] = spikeTrainToSpikeRates(train, bin)
+  rates = zeros(size(train) - [0 bin]);
+
+  for i = 1:size(train,1)
+    for t = bin:size(train,2)
+      rates(i, t-bin+1) = sum(train(i, t-bin+1:t));
+    end
+  end
 end

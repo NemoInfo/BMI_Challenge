@@ -5,8 +5,8 @@
 % "positionEstimator" to decode the trajectory. 
 
 function RMSE = testFunction_for_students_MTb(teamName)
-
-load monkeydata_training.mat
+clc;
+load monkeydata_training.mat;
 
 % Set random number generator
 rng(2013);

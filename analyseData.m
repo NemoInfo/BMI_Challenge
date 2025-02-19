@@ -54,6 +54,5 @@ for n = 1:num
         line([spike_indices(:)'; spike_indices(:)'], [n-0.5; n+0.5], ...
             'Color', "k", 'LineWidth', 1.2);
     end
-
 end
 hold off;
