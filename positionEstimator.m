@@ -1,4 +1,4 @@
-function [x, y] = positionEstimator(test_data, modelParameters)
+function [x, y, newModelParameters] = positionEstimator(test_data, modelParameters)
 
   % **********************************************************
   %
@@ -38,16 +38,51 @@ function [x, y] = positionEstimator(test_data, modelParameters)
   %             test_data.spikes = 98x340 matrix of spiking activity
     
   % ... compute position at the given timestep.
-  W = modelParameters.W;
-  b = modelParameters.b;
+if numel(test_data.decodedHandPos) == 0
+  startPos = test_data.startHandPos(1:2);
+  modelParameters.x_est = [startPos; 0; 0];
+  modelParameters.P_est = diag([1e-6, 1e-6, 1, 1]);
+end
+x_est = modelParameters.x_est;
+P_est = modelParameters.P_est;
 
-  pos = W * test_data.spikes(:,end) + b;
-  x = pos(1);
-  y = pos(2);
+% Kalman filter prediction
+A = modelParameters.A;
+W = modelParameters.W;
+x_pred = A * x_est;
+P_pred = A * P_est * A' + W;
+
+% Kalman filter update with latest spikes
+H = modelParameters.H;
+Q = modelParameters.Q;
+z = test_data.spikes(:, end); % Latest spike counts
+
+% Compute innovation covariance S
+S = H * P_pred * H' + Q;
+
+% Regularize S to avoid singularity
+epsilon = 1e-6; % Small regularization term
+S = S + epsilon * eye(size(S));
+
+% Compute Kalman gain using pseudo-inverse
+K = P_pred * H' * pinv(S);
+
+% Update state estimate and covariance
+y = z - H * x_pred;
+x_est = x_pred + K * y;
+P_est = (eye(4) - K * H) * P_pred;
+
+% Update state
+newModelParameters = modelParameters;
+newModelParameters.x_est = x_est;
+newModelParameters.P_est = P_est;
+
+% Return estimated position
+x = x_est(1);
+y = x_est(2);
   
-  % Return Value:
-  
-  % - [x, y]:
-  %     current position of the hand
-   
+% Return Value:
+
+% - [x, y]:
+%     current position of the hand
 end
