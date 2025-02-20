@@ -5,8 +5,8 @@ bin = 300;
 
 progress = waitbar(100, "Computing spike rates...");
 for i = 1:numel(train)
-  train(i).spikes  = train(i).spikes(:, 300-bin+1:end-100);
-  train(i).handPos = train(i).handPos(1:2, 300-1 :end-100);
+  train(i).spikes  = train(i).spikes(:, 301-bin:end);
+  train(i).handPos = train(i).handPos(1:2,  299:end);
   train(i).handPos = handPosToHandPosVel(train(i).handPos);
   train(i).spikes  = spikeTrainToSpikeRates(train(i).spikes, bin);
   assert(size(train(i).spikes, 2) == size(train(i).handPos, 2))
@@ -14,49 +14,39 @@ for i = 1:numel(train)
 end
 close(progress)
 
-X_Xm  = zeros(size(train(1),1), size(train(1),1));
-Xm_Xm = zeros(size(X_Xm));
+N = size(train(1).spikes, 1);  % size of state vector 
+P = size(train(1).handPos, 1); % number of neurons
 
-for i = 1:numel(train)
-  x  = train(i).handPos(:,2:end);
-  xm = train(i).handPos(:,1:end-1);
-  X_Xm  = X_Xm  + x  * xm';
-  Xm_Xm = Xm_Xm + xm * xm';
-end
-
-A = X_Xm / Xm_Xm;
-
-Q = zeros(size(A));
-for i = 1:numel(train)
-  x  = train(i).handPos(:,2:end);
-  xm = train(i).handPos(:,1:end-1);
-  eps= x - A * xm;
-  Q = Q + eps * eps' / size(x,2);
-end
-
-Q = Q / numel(train);
-
-Y_X = zeros(size(train(i).spikes,1), size(A,1));
-X_X = zeros(size(A));
+X_X    = zeros(P, P);
+Xp_Xm  = zeros(P, P);
+Xm_Xm  = zeros(P, P);
+Y_X    = zeros(N, P);
 
 for i = 1:numel(train)
   x = train(i).handPos;
   y = train(i).spikes;
+
+  Xp_Xm = Xp_Xm  + x(:,2:end)  * x(:,1:end-1)';
+  Xm_Xm = Xm_Xm + x(:,1:end-1) * x(:,1:end-1)';
   Y_X = Y_X + y * x';
   X_X = X_X + x * x';
 end
 
+A = Xp_Xm / Xm_Xm;
 H = Y_X / X_X;
 
-R = zeros(size(train(i).spikes,1), size(train(i).spikes,1));
-
+Q = zeros(P, P);
+R = zeros(N, N);
 for i = 1:numel(train)
   x = train(i).handPos;
   y = train(i).spikes;
+  e = x(:,2:end) - A * x(:,1:end-1);
   n = y - H * x;
+
+  Q = Q + e * e' / size(x,2);
   R = R + n * n' / size(x,2);
 end
-
+Q = Q / numel(train);
 R = R / numel(train);
 
 modelParameters.A = A;
