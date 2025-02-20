@@ -4,7 +4,7 @@ function [modelParameters] = positionEstimatorTraining(train)
 bin = 20;
 
 progress = waitbar(100, "Computing spike rates...");
-train = train(:,3);
+%train = train(:,3);
 for i = 1:numel(train)
   train(i).spikes  = train(i).spikes(:, 300-bin+1:end-100);
   train(i).handPos = train(i).handPos(1:2, 300-1 :end-100);
@@ -15,7 +15,12 @@ for i = 1:numel(train)
 end
 close(progress)
 
-% modelParameters = train; % @REMOVE THIS
+% Normalise hand pos
+state_mean = mean([train.handPos], 2);
+state_std = std([train.handPos], 0, 2);
+%for i = 1:numel(train)
+%  train(i).handPos = (train(i).handPos - state_mean) ./ state_std;
+%end
 
 X_Xm  = zeros(size(train(1),1), size(train(1),1));
 Xm_Xm = zeros(size(X_Xm));
@@ -66,6 +71,8 @@ modelParameters.A = A;
 modelParameters.Q = Q;
 modelParameters.H = H;
 modelParameters.R = R;
+modelParameters.x_std = state_std;
+modelParameters.x_mean = state_mean;
 end
 
 function [rates] = spikeTrainToSpikeRates(train, bin)
