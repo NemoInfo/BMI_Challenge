@@ -14,7 +14,7 @@ rng(2013);
 ix = randperm(length(trial));
 
 % Select training and testing data (you can choose to split your data in a different way if you wish)
-split = 50;
+split = 80;
 trainingData = trial(ix(1:split),:);
 testData = trial(ix(split+1:end),:);
 
