@@ -31,7 +31,7 @@ if numel(test_data.decodedHandPos) == 0
   %modelParameters.x = ([startPos; 0; 0] - x_mean) ./ x_std;
   modelParameters.x = [startPos; 0; 0];
   modelParameters.P =  diag([0, 0, 1e6, 1e6]);
-  modelParameters.T0 = 301-modelParameters.bin;
+  modelParameters.T0 = 302-modelParameters.bin;
 end
 T = size(test_data.spikes, 2);
 T0 = modelParameters.T0;
