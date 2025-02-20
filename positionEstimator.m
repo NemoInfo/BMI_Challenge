@@ -26,15 +26,12 @@ function [px, py, newModelParameters] = positionEstimator(test_data, modelParame
 % Return Value:
 % - [x, y]:
 %     current position of the hand
-
-x_std = modelParameters.x_std;
-x_mean = modelParameters.x_mean;
 if numel(test_data.decodedHandPos) == 0
   startPos = test_data.startHandPos(1:2);
   %modelParameters.x = ([startPos; 0; 0] - x_mean) ./ x_std;
   modelParameters.x = [startPos; 0; 0];
   modelParameters.P =  diag([0, 0, 1e6, 1e6]);
-  modelParameters.T0 = 300-19;
+  modelParameters.T0 = 301-modelParameters.bin;
 end
 T = size(test_data.spikes, 2);
 T0 = modelParameters.T0;
@@ -45,7 +42,7 @@ R = modelParameters.R;
 x = modelParameters.x;
 P = modelParameters.P;
 
-Y = spikeTrainToSpikeRates(test_data.spikes(:, T0:T), 20);
+Y = spikeTrainToSpikeRates(test_data.spikes(:, T0:T), modelParameters.bin);
 for t = 1:size(Y, 2)
   y = Y(:,t);
   xh = A * x;
@@ -62,18 +59,13 @@ end
 newModelParameters = modelParameters;
 newModelParameters.x = x;
 newModelParameters.P = P;
-newModelParameters.T0 = T-18;
+newModelParameters.T0 = T+2-modelParameters.bin;
 
 px = x(1);
 py = x(2);
 end
 
 function [rates] = spikeTrainToSpikeRates(train, bin)
-  rates = zeros(size(train) - [0 bin]);
-
-  for i = 1:size(train,1)
-    for t = bin:size(train,2)
-      rates(i, t-bin+1) = sum(train(i, t-bin+1:t));
-    end
-  end
+  kernel = ones(1, bin) / bin;  % averaging kernel
+  rates = conv2(train, kernel, 'valid'); 
 end

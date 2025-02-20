@@ -1,7 +1,7 @@
 function [modelParameters] = positionEstimatorTraining(train)
 % Kalman modeling
 % we need to compute A, H, Q and R
-bin = 20;
+bin = 300;
 
 progress = waitbar(100, "Computing spike rates...");
 %train = train(:,3);
@@ -68,6 +68,7 @@ end
 R = R / numel(train);
 
 modelParameters.A = A;
+modelParameters.bin = bin;
 modelParameters.Q = Q;
 modelParameters.H = H;
 modelParameters.R = R;
@@ -76,13 +77,8 @@ modelParameters.x_mean = state_mean;
 end
 
 function [rates] = spikeTrainToSpikeRates(train, bin)
-  rates = zeros(size(train) - [0 bin]);
-
-  for i = 1:size(train,1)
-    for t = bin:size(train,2)
-      rates(i, t-bin+1) = sum(train(i, t-bin+1:t));
-    end
-  end
+  kernel = ones(1, bin) / bin;  % averaging kernel
+  rates = conv2(train, kernel, 'valid'); 
 end
 
 function [state] = handPosToHandPosVel(pos)
