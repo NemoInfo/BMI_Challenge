@@ -1,59 +1,50 @@
-function [modelParameters] = positionEstimatorTraining(train)
-% Kalman modeling
-% we need to compute A, H, Q and R
+function [model] = positionEstimatorTraining(train)
+% PCA
 bin = 300;
 
 progress = waitbar(100, "Computing spike rates...");
+
+T = 0; % total training time
 for i = 1:numel(train)
   train(i).spikes  = train(i).spikes(:, 301-bin:end);
   train(i).handPos = train(i).handPos(1:2,  299:end);
-  train(i).handPos = handPosToHandPosVel(train(i).handPos);
+  train(i).states = handPosToHandState(train(i).handPos);
   train(i).spikes  = spikeTrainToSpikeRates(train(i).spikes, bin);
-  assert(size(train(i).spikes, 2) == size(train(i).handPos, 2))
+  assert(size(train(i).spikes, 2) == size(train(i).states, 2))
+  T = T + size(train(i).spikes,2);
   waitbar(i/numel(train), progress)
 end
 close(progress)
 
-N = size(train(1).spikes, 1);  % size of state vector 
-P = size(train(1).handPos, 1); % number of neurons
+N = size(train(1).spikes, 1);  % number of neurons 
+S = size(train(1).states, 1); % size of state vector
+K = 10;
 
-X_X    = zeros(P, P);
-Xp_Xm  = zeros(P, P);
-Xm_Xm  = zeros(P, P);
-Y_X    = zeros(N, P);
-
+X = zeros(N, T);
+Y = zeros(S, T);
+t = 1;
 for i = 1:numel(train)
-  x = train(i).handPos;
-  y = train(i).spikes;
-
-  Xp_Xm = Xp_Xm  + x(:,2:end)  * x(:,1:end-1)';
-  Xm_Xm = Xm_Xm + x(:,1:end-1) * x(:,1:end-1)';
-  Y_X = Y_X + y * x';
-  X_X = X_X + x * x';
+  Ti = size(train(i).spikes, 2);
+  X(:,t:t+Ti-1) = train(i).spikes;
+  Y(:,t:t+Ti-1) = train(i).states;
+  t = t + Ti;
 end
 
-A = Xp_Xm / Xm_Xm;
-H = Y_X / X_X;
+C = X * X' / T;
+[U, ~] = eig(C);
+Uk = U(:,end-K+1:end);
+Z = Uk' * X;
 
-Q = zeros(P, P);
-R = zeros(N, N);
-for i = 1:numel(train)
-  x = train(i).handPos;
-  y = train(i).spikes;
-  e = x(:,2:end) - A * x(:,1:end-1);
-  n = y - H * x;
+Za = [Z; ones(1,T)];
+Wa = Y * Za' / (Za * Za');
 
-  Q = Q + e * e' / size(x,2);
-  R = R + n * n' / size(x,2);
-end
-Q = Q / numel(train);
-R = R / numel(train);
+W = Wa(:,1:end-1);
+b = Wa(:,end);
 
-modelParameters.A = A;
-modelParameters.bin = bin;
-modelParameters.Q = Q;
-modelParameters.H = H;
-modelParameters.R = R;
+model.U = Uk;
+model.W = W;
+model.b = b;
+model.bin = bin;
 end
 
 function [rates] = spikeTrainToSpikeRates(train, bin)
@@ -61,7 +52,7 @@ function [rates] = spikeTrainToSpikeRates(train, bin)
   rates = conv2(train, kernel, 'valid'); 
 end
 
-function [state] = handPosToHandPosVel(pos)
+function [state] = handPosToHandState(pos)
   vel = pos(:,2:end) - pos(:,1:end-1);
   state = [pos(:,2:end); vel];
 end

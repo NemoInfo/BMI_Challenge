@@ -8,8 +8,16 @@ disp(trial);
 n_shown = fix(10 / 100 * size(trial,1));
 figure;
 hold on;
-colors = lines(9);
-colors = colors(1:end-1,:);
+colors = [
+    1 0 0;       % Red
+    0 1 0;       % Green
+    0 0 1;       % Blue
+    1 1 0;       % Yellow
+    1 0 1;       % Magenta
+    0 1 1;       % Cyan
+    0.5 0 0.5;   % Purple
+    1 0.5 0      % Orange
+];
 colororder(colors);
 for i = 1:n_shown
     for k = 1:8
