@@ -1,52 +1,67 @@
-function [modelParameters] = positionEstimatorTraining(tr)
-clc % @TEMPORARY
-% Arguments:
+function [modelParameters] = positionEstimatorTraining(train)
+% Kalman modeling
+% we need to compute A, H, Q and R
+bin = 300;
 
-% - training_data:
-%     training_data(n,k)              (n = trial id,  k = reaching angle)
-%     training_data(n,k).trialId      unique number of the trial
-%     training_data(n,k).spikes(i,t)  (i = neuron id, t = time)
-%     training_data(n,k).handPos(d,t) (d = dimension [1-3], t = time)
+progress = waitbar(100, "Computing spike rates...");
+for i = 1:numel(train)
+  train(i).spikes  = train(i).spikes(:, 301-bin:end);
+  train(i).handPos = train(i).handPos(1:2,  299:end);
+  train(i).handPos = handPosToHandPosVel(train(i).handPos);
+  train(i).spikes  = spikeTrainToSpikeRates(train(i).spikes, bin);
+  assert(size(train(i).spikes, 2) == size(train(i).handPos, 2))
+  waitbar(i/numel(train), progress)
+end
+close(progress)
 
-% ... train your model
-N_neurons = size(tr(1,1).spikes,1);
-N_tot_trials = numel(tr);
+N = size(train(1).spikes, 1);  % size of state vector 
+P = size(train(1).handPos, 1); % number of neurons
 
-% Trim data
-for i = 1:numel(tr)
-  tr(i).spikes = tr(i).spikes(:,300:end-100);
-  tr(i).handPos = tr(i).handPos(:,300:end-100);
+X_X    = zeros(P, P);
+Xp_Xm  = zeros(P, P);
+Xm_Xm  = zeros(P, P);
+Y_X    = zeros(N, P);
+
+for i = 1:numel(train)
+  x = train(i).handPos;
+  y = train(i).spikes;
+
+  Xp_Xm = Xp_Xm  + x(:,2:end)  * x(:,1:end-1)';
+  Xm_Xm = Xm_Xm + x(:,1:end-1) * x(:,1:end-1)';
+  Y_X = Y_X + y * x';
+  X_X = X_X + x * x';
 end
 
-% Train
-W = rand(2, N_neurons);
-b = rand(2, 1);
-X = tr(3).spikes;
-eta = 0.1;
-epochs = 100;
-RMSE = zeros(epochs,1);
+A = Xp_Xm / Xm_Xm;
+H = Y_X / X_X;
 
-figure;
-rmse_plot = plot(nan, nan, 'r', 'LineWidth', 2);
-%h = waitbar(0, 'Training...');
-for epoch = 1:epochs
-  for i = 1:numel(tr)
-    T = size(tr(i).spikes,2);
-    for t = 1:T
-      X  = tr(i).spikes(:,t);
-      Y  = tr(i).handPos(1:2,t);
-      Yh = W * X + b;
-      W  = W + eta*2/(T*N_tot_trials) * (Y - Yh) * X';
-      b  = b + eta*2/(T*N_tot_trials) * (Y - Yh);
-      RMSE(epoch) = RMSE(epoch) + 1/(T*N_tot_trials)*sqrt(sum((Y - Yh).^2));
-    end
-  end
-  set(rmse_plot, 'XData', 1:epoch, 'YData', RMSE(1:epoch));
-  drawnow;
-  %waitbar(epoch / epochs, h); % Update progress
+Q = zeros(P, P);
+R = zeros(N, N);
+for i = 1:numel(train)
+  x = train(i).handPos;
+  y = train(i).spikes;
+  e = x(:,2:end) - A * x(:,1:end-1);
+  n = y - H * x;
+
+  Q = Q + e * e' / size(x,2);
+  R = R + n * n' / size(x,2);
 end
-hold off;
+Q = Q / numel(train);
+R = R / numel(train);
 
-modelParameters.W = W;
-modelParameters.b = b;
+modelParameters.A = A;
+modelParameters.bin = bin;
+modelParameters.Q = Q;
+modelParameters.H = H;
+modelParameters.R = R;
+end
+
+function [rates] = spikeTrainToSpikeRates(train, bin)
+  kernel = ones(1, bin) / bin;  % averaging kernel
+  rates = conv2(train, kernel, 'valid'); 
+end
+
+function [state] = handPosToHandPosVel(pos)
+  vel = pos(:,2:end) - pos(:,1:end-1);
+  state = [pos(:,2:end); vel];
 end

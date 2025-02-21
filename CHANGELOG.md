@@ -1,3 +1,8 @@
+### Version 0.1 - Kalman
+I tried to do Kalman filtering i get nonsense results, I think I have some debbuging to do,
+also maybe using directly the spike train as inputs is not a great idea. Might be smart to 
+count it up in bins (20-50ms bins) and use it that way.
+
 ### Version 0
 
 Put the linear regression code into the positionEstimator(Training).m functions. 
