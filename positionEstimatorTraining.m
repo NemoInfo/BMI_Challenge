@@ -18,7 +18,7 @@ close(progress)
 
 N = size(train(1).spikes, 1);  % number of neurons 
 S = size(train(1).states, 1); % size of state vector
-K = 10;
+K = 90;
 
 X = zeros(N, T);
 Y = zeros(S, T);
@@ -35,15 +35,18 @@ C = X * X' / T;
 Uk = U(:,end-K+1:end);
 Z = Uk' * X;
 
-Za = [Z; ones(1,T)];
-Wa = Y * Za' / (Za * Za');
+Z = Z(:,2:end);
+Yp = Y(:,1:end-1);
+Y = Y(:,2:end);
 
-W = Wa(:,1:end-1);
-b = Wa(:,end);
+phi =  [Z' Yp' ones(T-1,1)];
+
+theta = (phi' * phi) \ (phi' * Y');
 
 model.U = Uk;
-model.W = W;
-model.b = b;
+model.Wz = theta(1:K,:)';
+model.Wy = theta(K+1:K+S,:)';
+model.b = theta(K+S+1,:)';
 model.bin = bin;
 end
 

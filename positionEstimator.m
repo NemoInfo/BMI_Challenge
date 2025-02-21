@@ -1,20 +1,15 @@
-function [px, py, newModelParameters] = positionEstimator(test_data, model)
-if numel(test_data.decodedHandPos) == 0
-  startPos = test_data.startHandPos(1:2);
-  model.x = [startPos; 0; 0];
-  model.T0 = 302-model.bin;
-end
+function [px, py] = positionEstimator(test_data, model)
 T = size(test_data.spikes, 2);
-T0 = model.T0;
-newModelParameters = model;
-
 X = spikeTrainToSpikeRates(test_data.spikes(:, 1:T), model.bin);
 
-Z  = model.U' * X;
-Yh = model.W * Z + model.b;
+y = [test_data.startHandPos(1:2); 0; 0];
+for t = 1:size(X,2)
+  z = model.U' * X(:,t);
+  y = model.Wz * z + model.Wy * y + model.b;
+end
 
-px = Yh(1, end);
-py = Yh(2, end);
+px = y(1);
+py = y(2);
 end
 
 function [rates] = spikeTrainToSpikeRates(train, bin)
