@@ -1,5 +1,5 @@
 function [model] = positionEstimatorTraining(train)
-% PCA
+% PCA Kalman
 bin = 300;
 
 progress = waitbar(100, "Computing spike rates...");
@@ -32,22 +32,47 @@ end
 
 C = X * X' / T;
 [U, ~] = eig(C);
-Uk = U(:,end-K+1:end);
-Z = Uk' * X;
+U = U(:,end-K+1:end);
 
-Z = Z(:,2:end);
-Yp = Y(:,1:end-1);
-Y = Y(:,2:end);
+Y_Y    = zeros(S);
+Yp_Ym  = zeros(S);
+Ym_Ym  = zeros(S);
+Z_Y    = zeros(K, S);
 
-phi =  [Z' Yp' ones(T-1,1)];
+for i = 1:numel(train)
+  y = train(i).states;
+  z = U' * train(i).spikes;
 
-theta = (phi' * phi) \ (phi' * Y');
+  Yp_Ym = Yp_Ym + y(:,2:end)   * y(:,1:end-1)';
+  Ym_Ym = Yp_Ym + y(:,1:end-1) * y(:,1:end-1)';
+  Z_Y = Z_Y + z * y';
+  Y_Y = Y_Y + y * y';
+end
 
-model.U = Uk;
-model.Wz = theta(1:K,:)';
-model.Wy = theta(K+1:K+S,:)';
-model.b = theta(K+S+1,:)';
+A = Yp_Ym / Ym_Ym;
+H = Z_Y   / Y_Y;
+
+Q = zeros(S);
+R = zeros(K);
+for i = 1:numel(train)
+  y = train(i).states;
+  z = U' * train(i).spikes;
+  e = y(:,2:end) - A * y(:,1:end-1);
+  n = z - H * y;
+  
+  Q = Q + e * e' / size(y,2);
+  R = R + n * n' / size(y,2);
+end
+Q = Q / numel(train);
+R = R / numel(train);
+
+
 model.bin = bin;
+model.U = U;
+model.A = A;
+model.Q = Q;
+model.H = H;
+model.R = R;
 end
 
 function [rates] = spikeTrainToSpikeRates(train, bin)
