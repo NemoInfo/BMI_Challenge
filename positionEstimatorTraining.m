@@ -19,25 +19,22 @@ S = size(train(1).handState, 1);
 H = 100;
 eta = 0.01;
 
-model.Wi = rand(H,N+S);
-model.bi = rand(H,1);
-model.Wo = rand(S,H);
-model.bo = rand(S,1);
+model.Wi = randn(H, N+S) * sqrt(2/(N+S));
+model.bi = zeros(H,1);
+model.Wo = randn(S, H) * sqrt(2/H);
+model.bo = zeros(S,1);
 
 epochs = 10;
-losses = [];
 progress = waitbar(100, "Training...");
-%figure;
-%hold off;
 
+losses = zeros(epochs);
 for epoch = 1:epochs
   total_loss = 0;
   loss_count = 0;
-  if epoch == 5
-    eta = 0.001;
-  end
+  order = randperm(numel(train));
 
-  for i = 1:numel(train)
+  for it = 1:numel(train)
+    i = order(it);
     X = train(i).spikes;    % (N,T)
     Y = train(i).handState; % (S,T)
     yp = Y(:,1);
@@ -76,38 +73,15 @@ for epoch = 1:epochs
       
       yp = yh;
     end
-    waitbar(epoch*i/(epochs*numel(train)), progress, sprintf('Training... Epoch %d | Sample %d', epoch, i));
+    waitbar(((epoch-1)*numel(train)+it)/(epochs*numel(train)), progress, ...
+      sprintf('Training... Epoch %d | Sample %d', epoch, it));
   end
 
-  losses = [losses; total_loss / loss_count];
-  disp(total_loss / loss_count);
-  %plot(losses);
-  drawnow;
+  losses(epoch) = total_loss / loss_count;
+  display(losses(epoch));
 end
+plot(losses);
 close(progress);
-
-% for i = 1:numel(train(end-20:end))
-%   X = train(i).spikes;    % (N,T)
-%   Y = train(i).handState; % (S,T)
-%   yp = Y(:,1);
-%   for t = 2:size(X,2)
-%     x = X(:,t);
-%     y = Y(:,t);
-% 
-%     % ---- Forward Pass ----
-%     z = [x; yp];
-%     h = model.Wi * z + model.bi;
-%     h = max(h,0); % ReLU
-%     yh= model.Wo * h + model.bo;
-% 
-%     % ----  Loss (MSE)  ----
-%     L = 0.5 * sum((yh - y).^2);
-%     total_loss = total_loss + L;
-%     loss_count = loss_count + 1;
-%   end
-% end
-% total_loss / loss_count
-
 end
 
 function [rates] = spikeTrainToSpikeRates(train, bin)
