@@ -49,6 +49,26 @@ end
 Q = Q / numel(train);
 R = R / numel(train);
 
+% Compute average paths
+D = size(train, 2);
+X = zeros(D, 1000, 2);
+for d = 1:D
+  for t = 1:size(X, 2)
+    count = 0;
+    for i = 1:size(train, 1)
+      if t > size(train(i, d).spikes, 2), continue, end
+      count = count + 1;
+      X(d, t, :) = X(d, t, :) + reshape(train(i, d).handPos(1:2, t), 1, 1, 2); 
+    end
+    if count >= 30 
+      X(d, t, :) = X(d, t, :) / count; 
+    else
+      X(d, t, :) = X(d, t-1, :);
+    end
+  end
+end
+
+modelParameters.X = X;
 modelParameters.A = A;
 modelParameters.bin = bin;
 modelParameters.Q = Q;
