@@ -1,2 +1,5 @@
 # MATLAB junk
 *.asv
+.ipynb_checkpoints
+__pycache__
+testing.ipynb
