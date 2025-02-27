@@ -100,16 +100,16 @@ classdef FastMLP
             end
         end
         
-        function obj = adam_update(obj, param, m, v, grad)
+        function [param, m_out, v_out] = adam_update(obj, param, m, v, grad)
             % Update biased first moment estimate
-            m = obj.beta1 * m + (1 - obj.beta1) * grad;
+            m_out = obj.beta1 * m + (1 - obj.beta1) * grad;
             % Update biased second raw moment estimate
-            v = obj.beta2 * v + (1 - obj.beta2) * (grad .* grad);
+            v_out = obj.beta2 * v + (1 - obj.beta2) * (grad .* grad);
             
             % Compute bias-corrected first moment estimate
-            m_hat = m / (1 - obj.beta1^obj.t);
+            m_hat = m_out / (1 - obj.beta1^obj.t);
             % Compute bias-corrected second raw moment estimate
-            v_hat = v / (1 - obj.beta2^obj.t);
+            v_hat = v_out / (1 - obj.beta2^obj.t);
             
             % Update parameters
             param = param - obj.learning_rate * m_hat ./ (sqrt(v_hat) + obj.epsilon);

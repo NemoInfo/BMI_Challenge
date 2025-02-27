@@ -156,9 +156,9 @@ function [modelParameters] = positionEstimatorTraining(training_data)
     end
     
     % Save model parameters
-    modelParameters.layers = net.layers;
-    modelParameters.weights = net.weights;
-    modelParameters.biases = net.biases;
+    modelParameters.layers = [input_size, hidden_size, output_size];  % Store layer sizes
+    modelParameters.weights = {net.input_weights, net.hidden_weights, net.output_weights};
+    modelParameters.biases = {net.input_biases, net.hidden_biases, net.output_biases};
 end
 
 
