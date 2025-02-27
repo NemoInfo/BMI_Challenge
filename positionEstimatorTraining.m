@@ -6,7 +6,7 @@ function [modelParameters] = positionEstimatorTraining(training_data)
     fprintf("Training the FastMLP with the following hyperparameters:\n")
     window_size = 20;  % ms
     input_size = 98 * window_size;  % 98 channels * time steps (flattened)
-    hidden_size = [192*2, 96];  % Two hidden layers with smaller sizes
+    hidden_size = [192*2, 96];  % [192*2, 96] achieves an RMSE of 80.1286 mm
     output_size = 2;  % x,y coordinates
     epochs = 50;
     batch_size = 256;  % Larger batch size for better vectorization
