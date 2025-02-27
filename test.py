@@ -14,12 +14,12 @@ def test_model():
 
   tr_data = trials[idx[:split]]
   te_data = trials[idx[split:]]
-
-  print("Testing the continuous posiotion estimator ...")
+  te_data = trials[idx[split - 20:split]]
 
   mean_sq_err = 0
   n_predictions = 0
 
+  print("Testing the continuous position estimator ...")
   model = model_train(tr_data, use_saved=True)
 
   for i in range(te_data.shape[0]):
@@ -39,15 +39,19 @@ def test_model():
         decoded_hand_pos, new_model = model_infer(trial, model)
         model = new_model
         prev_hand_pos.append(decoded_hand_pos)
-        mean_sq_err += np.linalg.norm(decoded_hand_pos - te_data[i, d][2][:2, t])**2
+        mean_sq_err += np.linalg.norm(decoded_hand_pos - te_data[i, d][2][:2, t - 1])**2
         n_predictions += 1
 
-      plt.plot(*prev_hand_pos, color=cmap(d), linewidth=1, alpha=0.4, linestyle="--")
-      plt.plot(*te_data[i, d][2][:2, times], color=cmap(d), linewidth=1, alpha=0.4)
+      prev_hand_pos = np.array(prev_hand_pos).T
+      plt.plot(*prev_hand_pos, color=cmap(d), linewidth=1, alpha=0.6, linestyle="--")
+      plt.plot(*te_data[i, d][2][:2, times], color=cmap(d), linewidth=1, alpha=0.6)
+
+
+#       plt.show()
+#       _ = input()
 
   print(mean_sq_err / n_predictions)
   plt.show()
-
 
 if __name__ == "__main__":
   test_model()
