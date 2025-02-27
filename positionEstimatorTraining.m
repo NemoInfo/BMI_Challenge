@@ -6,7 +6,7 @@ function [modelParameters] = positionEstimatorTraining(training_data)
     fprintf("Training the FastMLP with the following hyperparameters:\n")
     window_size = 20;  % ms
     input_size = 98 * window_size;  % 98 channels * time steps (flattened)
-    hidden_size = [192*2, 96];  % [192*2, 96] achieves an RMSE of 80.1286 mm
+    hidden_size = [floor(input_size/2), floor(input_size/4)];  % [192*2, 96] achieves an RMSE of 80.1286 mm
     output_size = 2;  % x,y coordinates
     epochs = 50;
     batch_size = 256;  % Larger batch size for better vectorization
@@ -157,8 +157,8 @@ function [modelParameters] = positionEstimatorTraining(training_data)
     
     % Save model parameters
     modelParameters.layers = [input_size, hidden_size, output_size];  % Store layer sizes
-    modelParameters.weights = {net.input_weights, net.hidden_weights, net.output_weights};
-    modelParameters.biases = {net.input_biases, net.hidden_biases, net.output_biases};
+    modelParameters.weights = net.weights;  % Already a cell array of weights
+    modelParameters.biases = net.biases;   % Already a cell array of biases
 end
 
 
