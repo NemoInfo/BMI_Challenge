@@ -27,28 +27,27 @@ function [px, py, newModelParameters] = positionEstimator(test_data, modelParame
 
 % First time initialization
 if ~isfield(modelParameters, 'mlp')
-    % Initialize MLP with the pretrained parameters
-    modelParameters.mlp = MLP(modelParameters.layer_sizes, modelParameters.learning_rate, modelParameters);
-    modelParameters.bin = 20; % Default bin size for spike rate calculation
+    % Initialize FastMLP with the pretrained parameters
+    layer_sizes = modelParameters.layers;  % This now contains [input_size, hidden_sizes, output_size]
+    modelParameters.mlp = FastMLP(layer_sizes, [], modelParameters);
+    modelParameters.window_size = 20; % Window size for spike data
 end
 
 % Get current time window
 T = size(test_data.spikes, 2);
-if numel(test_data.decodedHandPos) == 0
-    T0 = 1;
-else
-    T0 = T - modelParameters.bin + 1;
-end
 
-% Convert spike train to spike rates
-spike_rates = spikeTrainToSpikeRates(test_data.spikes(:, T0:T), modelParameters.bin);
+% Use the most recent window_size samples
+T0 = max(1, T - modelParameters.window_size + 1);
 
-% Reshape spike_rates to match network input dimensions
-% The network expects input as a matrix where each column is a sample
-spike_rates = spike_rates'; % Transpose to make features as rows
+% Extract the relevant window of spike data
+current_spikes = test_data.spikes(:, T0:T);
 
-% Use MLP to predict the position
-[px, py] = modelParameters.mlp.predict(spike_rates);
+% Reshape the input to match the network's expected format
+% The network expects input as a column vector [input_size x 1]
+input_vector = reshape(current_spikes, [], 1);
+
+% Make prediction
+[px, py] = modelParameters.mlp.predict(input_vector);
 
 % Update model parameters for next iteration
 newModelParameters = modelParameters;
