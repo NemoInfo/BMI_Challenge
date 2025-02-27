@@ -1,12 +1,8 @@
 classdef FastMLP
     properties
-        input_weights    % Input to first hidden layer weights
-        hidden_weights   % First to second hidden layer weights
-        output_weights  % Second hidden to output layer weights
-        input_biases    % First hidden layer biases
-        hidden_biases   % Second hidden layer biases
-        output_biases   % Output layer biases
-        learning_rate   % Learning rate for training
+        weights         % Cell array of weight matrices
+        biases         % Cell array of bias vectors
+        learning_rate  % Learning rate for training
         
         % Adam optimizer parameters
         beta1 = 0.9     % Exponential decay rate for first moment
@@ -14,19 +10,10 @@ classdef FastMLP
         epsilon = 1e-8  % Small constant for numerical stability
         
         % Adam momentum variables
-        m_input_w      % First moment for input weights
-        v_input_w      % Second moment for input weights
-        m_hidden_w     % First moment for hidden weights
-        v_hidden_w     % Second moment for hidden weights
-        m_output_w     % First moment for output weights
-        v_output_w     % Second moment for output weights
-        
-        m_input_b      % First moment for input biases
-        v_input_b      % Second moment for input biases
-        m_hidden_b     % First moment for hidden biases
-        v_hidden_b     % Second moment for hidden biases
-        m_output_b     % First moment for output biases
-        v_output_b     % Second moment for output biases
+        m_weights      % Cell array of first moments for weights
+        v_weights      % Cell array of second moments for weights
+        m_biases       % Cell array of first moments for biases
+        v_biases       % Cell array of second moments for biases
         
         t = 0          % Time step counter for Adam
     end
@@ -37,66 +24,52 @@ classdef FastMLP
             obj.learning_rate = 0.001;
             
             if nargin == 2 || nargin == 1
-                % Verify four layers (input, hidden1, hidden2, output)
-                if length(layer_sizes) ~= 4
-                    error('FastMLP requires exactly 4 layers (input, hidden1, hidden2, output)');
+                % Verify at least input and output layers
+                if length(layer_sizes) < 2
+                    error('FastMLP requires at least 2 layers (input and output)');
                 end
                 
-                % Initialize weights with scaled Xavier initialization
-                input_size = layer_sizes(1);
-                hidden1_size = layer_sizes(2);
-                hidden2_size = layer_sizes(3);
-                output_size = layer_sizes(4);
+                num_layers = length(layer_sizes);
+                obj.weights = cell(num_layers - 1, 1);
+                obj.biases = cell(num_layers - 1, 1);
+                obj.m_weights = cell(num_layers - 1, 1);
+                obj.v_weights = cell(num_layers - 1, 1);
+                obj.m_biases = cell(num_layers - 1, 1);
+                obj.v_biases = cell(num_layers - 1, 1);
                 
-                scale1 = sqrt(1/input_size) * 0.1;
-                scale2 = sqrt(1/hidden1_size) * 0.1;
-                scale3 = sqrt(1/hidden2_size) * 0.1;
-                
-                % Initialize weights and biases
-                obj.input_weights = randn(hidden1_size, input_size) * scale1;
-                obj.hidden_weights = randn(hidden2_size, hidden1_size) * scale2;
-                obj.output_weights = randn(output_size, hidden2_size) * scale3;
-                obj.input_biases = zeros(hidden1_size, 1);
-                obj.hidden_biases = zeros(hidden2_size, 1);
-                obj.output_biases = zeros(output_size, 1);
-                
-                % Initialize Adam momentum variables to zeros
-                obj.m_input_w = zeros(size(obj.input_weights));
-                obj.v_input_w = zeros(size(obj.input_weights));
-                obj.m_hidden_w = zeros(size(obj.hidden_weights));
-                obj.v_hidden_w = zeros(size(obj.hidden_weights));
-                obj.m_output_w = zeros(size(obj.output_weights));
-                obj.v_output_w = zeros(size(obj.output_weights));
-                
-                obj.m_input_b = zeros(size(obj.input_biases));
-                obj.v_input_b = zeros(size(obj.input_biases));
-                obj.m_hidden_b = zeros(size(obj.hidden_biases));
-                obj.v_hidden_b = zeros(size(obj.hidden_biases));
-                obj.m_output_b = zeros(size(obj.output_biases));
-                obj.v_output_b = zeros(size(obj.output_biases));
+                % Initialize each layer
+                for i = 1:(num_layers-1)
+                    % Xavier initialization with scaling factor
+                    scale = sqrt(1/layer_sizes(i)) * 0.1;
+                    
+                    % Initialize weights and biases
+                    obj.weights{i} = randn(layer_sizes(i+1), layer_sizes(i)) * scale;
+                    obj.biases{i} = zeros(layer_sizes(i+1), 1);
+                    
+                    % Initialize Adam momentum variables
+                    obj.m_weights{i} = zeros(size(obj.weights{i}));
+                    obj.v_weights{i} = zeros(size(obj.weights{i}));
+                    obj.m_biases{i} = zeros(size(obj.biases{i}));
+                    obj.v_biases{i} = zeros(size(obj.biases{i}));
+                end
             elseif nargin == 3
                 % Load from model parameters
-                obj.input_weights = modelParameters.weights{1};
-                obj.hidden_weights = modelParameters.weights{2};
-                obj.output_weights = modelParameters.weights{3};
-                obj.input_biases = modelParameters.biases{1};
-                obj.hidden_biases = modelParameters.biases{2};
-                obj.output_biases = modelParameters.biases{3};
+                num_layers = length(modelParameters.weights);
+                obj.weights = modelParameters.weights;
+                obj.biases = modelParameters.biases;
                 
-                % Initialize Adam momentum variables to zeros
-                obj.m_input_w = zeros(size(obj.input_weights));
-                obj.v_input_w = zeros(size(obj.input_weights));
-                obj.m_hidden_w = zeros(size(obj.hidden_weights));
-                obj.v_hidden_w = zeros(size(obj.hidden_weights));
-                obj.m_output_w = zeros(size(obj.output_weights));
-                obj.v_output_w = zeros(size(obj.output_weights));
+                % Initialize Adam momentum variables
+                obj.m_weights = cell(num_layers, 1);
+                obj.v_weights = cell(num_layers, 1);
+                obj.m_biases = cell(num_layers, 1);
+                obj.v_biases = cell(num_layers, 1);
                 
-                obj.m_input_b = zeros(size(obj.input_biases));
-                obj.v_input_b = zeros(size(obj.input_biases));
-                obj.m_hidden_b = zeros(size(obj.hidden_biases));
-                obj.v_hidden_b = zeros(size(obj.hidden_biases));
-                obj.m_output_b = zeros(size(obj.output_biases));
-                obj.v_output_b = zeros(size(obj.output_biases));
+                for i = 1:num_layers
+                    obj.m_weights{i} = zeros(size(obj.weights{i}));
+                    obj.v_weights{i} = zeros(size(obj.weights{i}));
+                    obj.m_biases{i} = zeros(size(obj.biases{i}));
+                    obj.v_biases{i} = zeros(size(obj.biases{i}));
+                end
             end
         end
         
@@ -116,98 +89,90 @@ classdef FastMLP
         end
         
         function [output, cache] = forward(obj, x)
+            num_layers = length(obj.weights);
+            cache.x = cell(num_layers + 1, 1);
+            cache.z = cell(num_layers, 1);
+            
             % Normalize input
             x_mean = mean(x, 2);
             x_std = std(x, 0, 2) + eps;
-            x_norm = (x - x_mean) ./ x_std;
+            cache.x{1} = (x - x_mean) ./ x_std;
             
-            % First hidden layer
-            z1 = obj.input_weights * x_norm + obj.input_biases;
-            a1 = max(0, z1);  % ReLU activation
+            % Forward through all layers
+            for i = 1:num_layers
+                % Compute pre-activation
+                cache.z{i} = obj.weights{i} * cache.x{i} + obj.biases{i};
+                
+                if i == num_layers
+                    % Linear output for last layer
+                    cache.x{i+1} = cache.z{i};
+                else
+                    % ReLU activation for hidden layers
+                    cache.x{i+1} = max(0, cache.z{i});
+                end
+            end
             
-            % Second hidden layer
-            z2 = obj.hidden_weights * a1 + obj.hidden_biases;
-            a2 = max(0, z2);  % ReLU activation
-            
-            % Output layer (linear)
-            z3 = obj.output_weights * a2 + obj.output_biases;
-            
-            % Store cache for backward pass
-            cache.x_norm = x_norm;
-            cache.z1 = z1;
-            cache.a1 = a1;
-            cache.z2 = z2;
-            cache.a2 = a2;
-            cache.z3 = z3;
-            
-            output = z3;
+            output = cache.x{end};
         end
         
         function obj = backward(obj, ~, y, cache)
             batch_size = size(y, 2);
             obj.t = obj.t + 1;  % Increment time step
+            num_layers = length(obj.weights);
+            
+            % Initialize gradients
+            dz = cell(num_layers, 1);
             
             % Output layer gradient
-            dz3 = (cache.z3 - y) / batch_size;
+            dz{num_layers} = (cache.x{num_layers+1} - y) / batch_size;
             
-            % Second hidden layer gradient
-            da2 = obj.output_weights' * dz3;
-            dz2 = da2 .* (cache.z2 > 0);  % ReLU derivative
+            % Backpropagate through hidden layers
+            for i = num_layers-1:-1:1
+                % Gradient of hidden layer
+                da = obj.weights{i+1}' * dz{i+1};
+                dz{i} = da .* (cache.z{i} > 0);  % ReLU derivative
+            end
             
-            % First hidden layer gradient
-            da1 = obj.hidden_weights' * dz2;
-            dz1 = da1 .* (cache.z1 > 0);  % ReLU derivative
-            
-            % Compute weight and bias gradients
-            dW3 = dz3 * cache.a2';
-            db3 = sum(dz3, 2);
-            dW2 = dz2 * cache.a1';
-            db2 = sum(dz2, 2);
-            dW1 = dz1 * cache.x_norm';
-            db1 = sum(dz1, 2);
-            
-            % Clip gradients
-            clip_threshold = 1.0;
-            dW3 = min(max(dW3, -clip_threshold), clip_threshold);
-            db3 = min(max(db3, -clip_threshold), clip_threshold);
-            dW2 = min(max(dW2, -clip_threshold), clip_threshold);
-            db2 = min(max(db2, -clip_threshold), clip_threshold);
-            dW1 = min(max(dW1, -clip_threshold), clip_threshold);
-            db1 = min(max(db1, -clip_threshold), clip_threshold);
-            
-            % Update using Adam optimizer
-            % Output layer
-            [obj.output_weights, obj.m_output_w, obj.v_output_w] = ...
-                obj.adam_update(obj.output_weights, obj.m_output_w, obj.v_output_w, dW3);
-            [obj.output_biases, obj.m_output_b, obj.v_output_b] = ...
-                obj.adam_update(obj.output_biases, obj.m_output_b, obj.v_output_b, db3);
-            
-            % Hidden layer
-            [obj.hidden_weights, obj.m_hidden_w, obj.v_hidden_w] = ...
-                obj.adam_update(obj.hidden_weights, obj.m_hidden_w, obj.v_hidden_w, dW2);
-            [obj.hidden_biases, obj.m_hidden_b, obj.v_hidden_b] = ...
-                obj.adam_update(obj.hidden_biases, obj.m_hidden_b, obj.v_hidden_b, db2);
-            
-            % Input layer
-            [obj.input_weights, obj.m_input_w, obj.v_input_w] = ...
-                obj.adam_update(obj.input_weights, obj.m_input_w, obj.v_input_w, dW1);
-            [obj.input_biases, obj.m_input_b, obj.v_input_b] = ...
-                obj.adam_update(obj.input_biases, obj.m_input_b, obj.v_input_b, db1);
+            % Update all layers
+            for i = 1:num_layers
+                % Compute weight and bias gradients
+                dW = dz{i} * cache.x{i}';
+                db = sum(dz{i}, 2);
+                
+                % Clip gradients
+                clip_threshold = 1.0;
+                dW = min(max(dW, -clip_threshold), clip_threshold);
+                db = min(max(db, -clip_threshold), clip_threshold);
+                
+                % Update using Adam optimizer
+                [obj.weights{i}, obj.m_weights{i}, obj.v_weights{i}] = ...
+                    obj.adam_update(obj.weights{i}, obj.m_weights{i}, obj.v_weights{i}, dW);
+                [obj.biases{i}, obj.m_biases{i}, obj.v_biases{i}] = ...
+                    obj.adam_update(obj.biases{i}, obj.m_biases{i}, obj.v_biases{i}, db);
+            end
         end
         
         function [x_pred, y_pred] = predict(obj, x)
             % Normalize input
             x_mean = mean(x, 2);
             x_std = std(x, 0, 2) + eps;
-            x_norm = (x - x_mean) ./ x_std;
+            a = (x - x_mean) ./ x_std;
             
             % Forward pass through all layers
-            a1 = max(0, obj.input_weights * x_norm + obj.input_biases);
-            a2 = max(0, obj.hidden_weights * a1 + obj.hidden_biases);
-            output = obj.output_weights * a2 + obj.output_biases;
+            for i = 1:length(obj.weights)
+                z = obj.weights{i} * a + obj.biases{i};
+                if i == length(obj.weights)
+                    % Linear output for last layer
+                    a = z;
+                else
+                    % ReLU activation for hidden layers
+                    a = max(0, z);
+                end
+            end
             
-            x_pred = output(1, :);
-            y_pred = output(2, :);
+            % Extract predictions
+            x_pred = a(1, :);
+            y_pred = a(2, :);
         end
         
         function loss = compute_loss(~, y_pred, y_true)
