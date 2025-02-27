@@ -4,11 +4,22 @@ classdef FastMLP
         weights        % Cell array of weight matrices
         biases        % Cell array of bias vectors
         learning_rate % Learning rate for training
+        momentum      % Momentum coefficient for faster training
+        velocity_w    % Velocity for weights (momentum)
+        velocity_b    % Velocity for biases (momentum)
     end
     
     methods
         function obj = FastMLP(layer_sizes, learning_rate, modelParameters)
-            % Constructor with optional model parameters loading
+            % Clear any existing properties
+            obj.layers = [];
+            obj.weights = {};
+            obj.biases = {};
+            obj.learning_rate = 0;
+            obj.momentum = 0;
+            obj.velocity_w = {};
+            obj.velocity_b = {};
+            
             if nargin == 2
                 % Initialize new network
                 obj.layers = layer_sizes;
@@ -16,17 +27,23 @@ classdef FastMLP
                     error('FastMLP must have at least 3 layers (Input, hidden, output)');
                 end
                 obj.learning_rate = learning_rate;
+                obj.momentum = 0.9;  % Add momentum for faster convergence
                 
-                % Preallocate cells for weights and biases
+                % Preallocate cells
                 num_layers = length(layer_sizes);
                 obj.weights = cell(num_layers - 1, 1);
                 obj.biases = cell(num_layers - 1, 1);
+                obj.velocity_w = cell(num_layers - 1, 1);
+                obj.velocity_b = cell(num_layers - 1, 1);
                 
-                % Xavier/He initialization for better convergence
+                % He initialization for better convergence
                 for i = 1:num_layers-1
-                    % He initialization for ReLU
-                    obj.weights{i} = randn(layer_sizes(i+1), layer_sizes(i)) * sqrt(2/layer_sizes(i));
+                    fan_in = layer_sizes(i);
+                    scale = sqrt(2/fan_in);
+                    obj.weights{i} = randn(layer_sizes(i+1), fan_in) * scale;
                     obj.biases{i} = zeros(layer_sizes(i+1), 1);
+                    obj.velocity_w{i} = zeros(size(obj.weights{i}));
+                    obj.velocity_b{i} = zeros(size(obj.biases{i}));
                 end
             elseif nargin == 1 || nargin == 3
                 % Load from model parameters
@@ -37,29 +54,38 @@ classdef FastMLP
                     error('FastMLP must have at least 3 layers (Input, hidden, output)');
                 end
                 obj.learning_rate = learning_rate;
+                obj.momentum = 0.9;
+                
+                % Initialize velocities
+                num_layers = length(obj.layers);
+                obj.velocity_w = cell(num_layers - 1, 1);
+                obj.velocity_b = cell(num_layers - 1, 1);
+                for i = 1:num_layers-1
+                    obj.velocity_w{i} = zeros(size(obj.weights{i}));
+                    obj.velocity_b{i} = zeros(size(obj.biases{i}));
+                end
             end
         end
         
         function [output, cache] = forward(obj, x)
-            % Optimized forward pass with pre-allocation and vectorization
+            % Fast forward pass with minimal memory allocation
             num_layers = length(obj.layers);
-            batch_size = size(x, 2);
             
-            % Pre-allocate cache for activations and linear combinations
+            % Pre-allocate cache
             cache.Z = cell(num_layers - 1, 1);
             cache.A = cell(num_layers, 1);
-            cache.A{1} = x;  % Input layer activation
+            cache.A{1} = x;
             
-            % Vectorized forward propagation
+            % Forward propagation with optimized operations
             for i = 1:num_layers-1
                 % Efficient matrix multiplication with broadcasting
-                cache.Z{i} = obj.weights{i} * cache.A{i} + obj.biases{i};
+                cache.Z{i} = bsxfun(@plus, obj.weights{i} * cache.A{i}, obj.biases{i});
                 
                 if i == num_layers-1
-                    % Linear activation for output layer (regression)
+                    % Linear output layer (no activation)
                     cache.A{i+1} = cache.Z{i};
                 else
-                    % Vectorized ReLU for hidden layers
+                    % Fast ReLU with in-place operation
                     cache.A{i+1} = max(0, cache.Z{i});
                 end
             end
@@ -68,53 +94,58 @@ classdef FastMLP
         end
         
         function obj = backward(obj, x, y, cache)
-            % Optimized backward pass with vectorized operations
+            % Fast backward pass with momentum
             batch_size = size(x, 2);
             num_layers = length(obj.layers);
             
-            % Pre-allocate gradients
-            dW = cell(num_layers - 1, 1);
-            db = cell(num_layers - 1, 1);
-            dA = cell(num_layers, 1);
+            % Initialize gradient at output layer
+            dZ = (cache.A{end} - y) / batch_size;
             
-            % Output layer error (MSE derivative)
-            dA{num_layers} = (cache.A{end} - y) / batch_size;
-            
-            % Vectorized backward propagation
+            % Backward propagation with momentum
             for i = num_layers-1:-1:1
-                if i == num_layers-1
-                    dZ = dA{i+1};  % Output layer uses linear activation
-                else
-                    % Vectorized ReLU derivative
-                    dZ = dA{i+1} .* (cache.Z{i} > 0);
-                end
+                % Compute gradients
+                dW = dZ * cache.A{i}';
+                db = sum(dZ, 2);
                 
-                % Compute gradients efficiently
-                dW{i} = dZ * cache.A{i}';
-                db{i} = sum(dZ, 2);
+                % Update velocities (momentum)
+                obj.velocity_w{i} = obj.momentum * obj.velocity_w{i} + obj.learning_rate * dW;
+                obj.velocity_b{i} = obj.momentum * obj.velocity_b{i} + obj.learning_rate * db;
                 
-                if i > 1  % Skip for input layer
-                    dA{i} = obj.weights{i}' * dZ;
+                % Update parameters
+                obj.weights{i} = obj.weights{i} - obj.velocity_w{i};
+                obj.biases{i} = obj.biases{i} - obj.velocity_b{i};
+                
+                % Compute gradient for next layer
+                if i > 1
+                    dZ = (obj.weights{i}' * dZ) .* (cache.Z{i-1} > 0);
                 end
-            end
-            
-            % Vectorized parameter updates
-            for i = 1:num_layers-1
-                obj.weights{i} = obj.weights{i} - obj.learning_rate * dW{i};
-                obj.biases{i} = obj.biases{i} - obj.learning_rate * db{i};
             end
         end
         
         function [x_pred, y_pred] = predict(obj, x)
-            % Vectorized prediction
-            [output, ~] = obj.forward(x);
-            x_pred = output(1, :);
-            y_pred = output(2, :);
+            % Fast prediction without caching
+            num_layers = length(obj.layers);
+            a = x;
+            
+            % Forward pass without storing intermediates
+            for i = 1:num_layers-1
+                z = bsxfun(@plus, obj.weights{i} * a, obj.biases{i});
+                if i == num_layers-1
+                    a = z;
+                else
+                    a = max(0, z);
+                end
+            end
+            
+            % Extract predictions
+            x_pred = a(1, :);
+            y_pred = a(2, :);
         end
         
         function loss = compute_loss(~, y_pred, y_true)
-            % Vectorized MSE computation
-            loss = mean(sum((y_pred - y_true).^2, 1));
+            % Fast MSE computation
+            diff = y_pred - y_true;
+            loss = mean(sum(diff .* diff, 1));
         end
     end
 end 
