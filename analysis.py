@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from scipy.io import loadmat
 
 
 def plot_data(trials):
@@ -11,3 +12,8 @@ def plot_data(trials):
       a2.plot(*trials[i, d][2][:2, 300:-100], color=cmap(d), linewidth=1, alpha=0.4)
       a3.plot(*trials[i, d][2][:2, -100:], color=cmap(d), linewidth=1, alpha=0.4)
   plt.show()
+
+
+if __name__ == "__main__":
+  trials = loadmat("monkeydata_training.mat")['trial']
+  plot_data(trials)
