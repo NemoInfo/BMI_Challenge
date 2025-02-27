@@ -6,22 +6,20 @@ function [modelParameters] = positionEstimatorTraining(training_data)
     fprintf("Training the FastMLP with the following hyperparameters:\n")
     window_size = 20;  % ms
     input_size = 98 * window_size;  % 98 channels * time steps (flattened)
-    hidden_size = [256, 128];  % Two hidden layers
+    hidden_size = [192, 96];  % Two hidden layers with smaller sizes
     output_size = 2;  % x,y coordinates
-    learning_rate = 0.001;
     epochs = 50;
     batch_size = 256;  % Larger batch size for better vectorization
     fprintf("Window size: %d ms\n", window_size);
     fprintf("Input size: %d\n", input_size);
     fprintf("Hidden size: %s\n", mat2str(hidden_size));
     fprintf("Output size: %d\n", output_size);
-    fprintf("Learning rate: %f\n", learning_rate);
     fprintf("Epochs: %d\n", epochs);
     fprintf("Batch size: %d\n", batch_size);
     
-    % Create network
+    % Create network (learning rate is fixed in FastMLP)
     layer_sizes = [input_size, hidden_size, output_size];
-    net = FastMLP(layer_sizes, learning_rate);
+    net = FastMLP(layer_sizes);
     
     % Calculate total number of samples and preallocate in chunks
     fprintf('Preprocessing data...\n');
