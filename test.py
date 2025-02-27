@@ -46,12 +46,9 @@ def test_model():
       plt.plot(*prev_hand_pos, color=cmap(d), linewidth=1, alpha=0.6, linestyle="--")
       plt.plot(*te_data[i, d][2][:2, times], color=cmap(d), linewidth=1, alpha=0.6)
 
-
-#       plt.show()
-#       _ = input()
-
   print(mean_sq_err / n_predictions)
   plt.show()
+
 
 if __name__ == "__main__":
   test_model()

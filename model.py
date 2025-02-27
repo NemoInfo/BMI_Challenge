@@ -1,6 +1,7 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.io import loadmat
-from scipy.signal import convolve2d
+from scipy.signal import lfilter
 from tqdm import tqdm
 import torch
 import torch.nn as nn
@@ -37,6 +38,7 @@ class MonkeyDataset(torch.utils.data.Dataset):
         self.samples.append({
             "inputs": torch.from_numpy(spikes).to(device),
             "target": torch.from_numpy(pos).to(device),
+            "id": i_d,
         })
 
   def __len__(self):
@@ -51,7 +53,7 @@ def _model_train(model, dataset, epochs=50, batch_size=64, lr=1e-3):
 
   dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
   optimizer = optim.Adam(model.parameters(), lr=lr)
-  criterion = nn.MSELoss()
+  criterion = torch.nn.functional.pairwise_distance
   best_loss = float('inf')
 
   for epoch in range(epochs):
@@ -63,13 +65,13 @@ def _model_train(model, dataset, epochs=50, batch_size=64, lr=1e-3):
       optimizer.zero_grad()
       outputs = model(spikes)
 
-      loss = criterion(outputs, targets)
+      loss = (criterion(outputs, targets)**2).mean()
       loss.backward()
       optimizer.step()
 
       total_loss += loss.item()
 
-    avg_loss = total_loss / len(dataloader)
+    avg_loss = total_loss
     print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
 
     if avg_loss < best_loss:
@@ -94,8 +96,8 @@ def model_train(train, use_saved=False):
   # Pre-process data
   for i in tqdm(range(Tr)):
     for d in range(D):
-      train[i, d][1] = train_to_rate(train[i, d][1], state["bin"]).astype(np.float32)
-      train[i, d][2] = train[i, d][2][:2, state["bin"] - 1:].astype(np.float32)
+      train[i, d][1] = train_to_rate(train[i, d][1]).astype(np.float32)
+      train[i, d][2] = train[i, d][2][:2].astype(np.float32)
 
   dataset = MonkeyDataset(train, device)
 
@@ -106,29 +108,25 @@ def model_train(train, use_saved=False):
   return state, model
 
 
+def train_to_rate(train, tau=50):
+  alpha = 1 / tau  # Normalization factor
+  b = [alpha]  # Filter numerator
+  a = [1, -(1 - alpha)]  # Filter denominator for causal IIR implementation
+  return lfilter(b, a, train, axis=1)
+
+
 def model_infer(trial, state_model):
   state, model = state_model
 
   if not trial["prev_hand_pos"]:
     state["t0"] = 0
 
-
-#     start_pos = torch.from_numpy(trial["start_hand_pos"].astype(np.float32).T).to(state["device"])[None, :]
-#   else:
-#     start_pos = torch.from_numpy(trial["prev_hand_pos"][-1].astype(np.float32).T).to(state["device"])[None, :]
-
   T = trial["spikes"].shape[1]
-  spikes = torch.from_numpy(train_to_rate(trial["spikes"][:,-state["bin"]:],
-                                          state["bin"]).astype(np.float32)).to(state["device"])[None, :, -1]
-  outputs = model(spikes)
+  spikes = torch.from_numpy(train_to_rate(trial["spikes"])[:, -1].astype(np.float32)).to(state["device"])
+  outputs = model(spikes[None, :])
 
   state["t0"] = T - state["bin"]
   return outputs[0].cpu().detach().numpy(), (state, model)
-
-
-def train_to_rate(train, _bin):
-  kernel = np.ones((1, _bin)) / _bin
-  return convolve2d(train, kernel, mode="valid")
 
 
 if __name__ == "__main__":
